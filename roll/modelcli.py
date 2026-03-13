@@ -383,7 +383,7 @@ class ModelCLI:
         negative_count = (df['real_label'] < 0).sum()
         total_count = len(df)
         positive_ratio = positive_count / total_count if total_count > 0 else 0
-        print(f"real_label > 0 数量: {positive_count}，real_label == 0 数量: {zero_count}，real_label < 0 数量: {negative_count}，总数量: {total_count}，胜率: {positive_ratio:.2%}")
+        print(f"预测正收益次数（total_count）: {total_count}，实际正收益次数（positive_count）: {positive_count}，zero数量: {zero_count}，负收益数量: {negative_count}，胜率: {positive_ratio:.2%}")
 
     def _review_subdir(self, subdir):
         print(f"- {subdir.name}")
@@ -397,15 +397,16 @@ class ModelCLI:
             None,
         )
         if date_str:
-            print(f"  直接从文件名提取的日期: {date_str}")
+            print(f"直接从文件名提取的日期: {date_str}")
         else:
-            print("  未发现格式为 xxxx-xx-xx_ 的 CSV 文件名")
+            print("未发现格式为 xxxx-xx-xx_ 的 CSV 文件名")
 
         trade_data = get_trade_data(self.kwargs.get("provider_uri"))
         if date_str and trade_data and date_str in trade_data[-2:]:
+            logger.info(f"还不能复盘 {date_str}")
             return
 
-        logger.info(f"  开始复盘 {date_str if date_str else '[未知日期]'}")
+        logger.info(f"开始复盘 {date_str if date_str else '[未知日期]'}")
         df_filter_ret, df_ret = None, None
         if date_str:
             filter_ret_path = subdir / f"{date_str}_filter_ret.csv"
@@ -415,9 +416,9 @@ class ModelCLI:
             if filter_ret_path.exists():
                 try:
                     df_filter_ret = pd.read_csv(filter_ret_path)
-                    print(f"  已读取: {filter_ret_path.name}, 行数: {len(df_filter_ret)}")
+                    print(f"已读取: {filter_ret_path.name}, 行数: {len(df_filter_ret)}")
                 except Exception as e:
-                    print(f"  读取 {filter_ret_path.name} 出错: {e}")
+                    print(f"读取 {filter_ret_path.name} 出错: {e}")
             else:
                 print(f"  未找到: {filter_ret_path.name}")
 
@@ -425,11 +426,11 @@ class ModelCLI:
             if ret_path.exists():
                 try:
                     df_ret = pd.read_csv(ret_path)
-                    print(f"  已读取: {ret_path.name}, 行数: {len(df_ret)}")
+                    print(f"已读取: {ret_path.name}, 行数: {len(df_ret)}")
                 except Exception as e:
-                    print(f"  读取 {ret_path.name} 出错: {e}")
+                    print(f"读取 {ret_path.name} 出错: {e}")
             else:
-                print(f"  未找到: {ret_path.name}")
+                print(f"未找到: {ret_path.name}")
 
         real_df = self.get_real_label(dates={"start": date_str, "end": date_str})
         real_df = real_df.reset_index()
