@@ -58,7 +58,7 @@ jobs:
           git checkout origin/qlib_score -- qlib_score_csv || mkdir -p qlib_score_csv
           git restore --staged qlib_score_csv 2>/dev/null || true
 
-      - name: 5. Run analysis
+      - name: 5. Review
         run: |
             echo ">>> 运行分析脚本..."
             cd ./roll && python ./roll.py model review
@@ -82,3 +82,39 @@ jobs:
               git commit -m "自动更新马后炮分析结果: $(date +'%Y-%m-%d %H:%M:%S')"
               git push origin main
             fi
+
+      - name: 将 review_csv 目录所有 csv 文件提交到 qlib_score 分支
+        run: |
+          # 确保 review_csv 存在并切换到根目录（仓库根假定包含 review_csv 文件夹）
+          cd "$(git rev-parse --show-toplevel)"
+
+          # 拉取 qlib_score 分支的最新内容
+          git fetch origin qlib_score
+
+          # 检出并切换到本地 qlib_score 分支，若不存在则新建追踪远程分支
+          if git branch --list qlib_score; then
+            git checkout qlib_score
+          else
+            git checkout -b qlib_score origin/qlib_score
+          fi
+
+          # 同步远端 qlib_score
+          git pull origin qlib_score || true
+
+          # 确保 review_csv 目录存在目标目录
+          mkdir -p review_csv
+
+          # 添加所有 csv 文件
+          git add -f review_csv/*.csv
+
+          # 配置 Git 用户身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 如果确实有变更才提交
+          if git diff --cached --quiet; then
+            echo "review_csv 下 csv 没有变化，跳过提交。"
+          else
+            git commit -m "自动同步 review_csv 到 qlib_score 分支: $(date +'%Y-%m-%d %H:%M:%S')"
+            git push origin qlib_score
+          fi
