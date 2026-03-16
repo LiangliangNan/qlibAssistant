@@ -178,8 +178,7 @@ class ModelCLI:
                     logger.info(f"Experiment: {name} 删除 Recorder: {rid} ")
                     exp.delete_recorder(rid)
 
-    def analysis(self, stock_list=None):
-        logger.info(f"股票列表: {stock_list}")
+    def analysis(self):
         ret = []
         model_list = self.get_model_list()
         for mc in model_list:
@@ -196,24 +195,18 @@ class ModelCLI:
 
                 dataset_config['kwargs']['segments']['test'] = (predict_date1, predict_date2)
                 dataset_config['kwargs']['handler']['kwargs']['end_time'] = predict_date2
-                if stock_list:
-                    dataset_config['kwargs']['handler']['kwargs']['instruments'] = stock_list
 
                 dataset = init_instance_by_config(dataset_config)
                 pred_score = model.predict(dataset, segment="test")
                 ret.append([mc.exp_name, rid, pred_score])
         return ret
 
-    def inquiry(self):
-        results = self.analysis(stock_list=self.kwargs.get('stock_list', []))
-        if results: self.collect(results, stock_list=self.kwargs.get('stock_list'))
-
     def selection(self):
         results = self.analysis()
         if results: self.collect(results)
 
-    def collect(self, results, stock_list=None):
-        func_name = "inquiry" if stock_list else "selection"
+    def collect(self, results):
+        func_name = "selection"
         latest_stock_list = get_normalized_stock_list()
 
         processed_list = []
@@ -243,7 +236,7 @@ class ModelCLI:
         df_final = result_df
         print(result_df.head())
 
-        self._save_results(df_final, func_name, stock_list, latest_stock_list)
+        self._save_results(df_final, func_name, latest_stock_list)
 
     def _record_model_info(self, md_file = "model_info.md"):
         print(f"record model info to {md_file}")
@@ -258,7 +251,7 @@ class ModelCLI:
                 append_to_file(md_file, f"\n\tRecorder: {rid}\n")
                 append_to_file(md_file, f"\n\t\tModel: {info}\n")
 
-    def _save_results(self, df_final, func_name, stock_list, latest_stock_list):
+    def _save_results(self, df_final, func_name, latest_stock_list):
         base_dir = Path(self.kwargs['analysis_folder']).expanduser()
         save_dir = base_dir / f"{func_name}_{datetime.now().strftime('%Y%m%d_%H_%M_%S')}"
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -268,39 +261,30 @@ class ModelCLI:
         append_to_file(md_file, f" {self.kwargs}\n\n")
         self._record_model_info(md_file)
 
-        if stock_list:
-            for stock in stock_list:
-                res = df_final[df_final['instrument'] == stock]
-                append_to_file(md_file, f"\n\n # {stock}\n\n{res.to_markdown(index=True)}\n\n")
-        else:
-            alpha158_df = self.get_alpha_data().reset_index()
-            for date, group_df in df_final.groupby('datetime'):
-                date_str = str(date.date())
-                ret_df = group_df.groupby('instrument')['score'].agg(avg_score='mean', pos_ratio=lambda x: (x > 0).mean()).reset_index()
+        alpha158_df = self.get_alpha_data().reset_index()
+        for date, group_df in df_final.groupby('datetime'):
+            date_str = str(date.date())
+            ret_df = group_df.groupby('instrument')['score'].agg(avg_score='mean', pos_ratio=lambda x: (x > 0).mean()).reset_index()
 
-                cols_to_restore = ['instrument', 'real_label', 'error', 'abs_error']
-                # 确保这些列在 group_df 中确实存在
-                existing_cols = [c for c in cols_to_restore if c in group_df.columns]
-                # 获取唯一的映射关系
-                restore_df = group_df[existing_cols].drop_duplicates('instrument')
-                # 重新合并回来
-                ret_df = pd.merge(
-                    ret_df,
-                    restore_df,
-                    on='instrument',
-                    how='left',
-                    validate='one_to_one'  # 确保一对一，防止重复
-                )
-                ret_df = ret_df.sort_values(by='avg_score', ascending=False)
-                if latest_stock_list is not None:
-                    ret_df = pd.merge(ret_df, latest_stock_list, left_on='instrument', right_on='code', how='left', validate='one_to_one')
+            cols_to_restore = ['instrument', 'real_label', 'error', 'abs_error']
+            existing_cols = [c for c in cols_to_restore if c in group_df.columns]
+            restore_df = group_df[existing_cols].drop_duplicates('instrument')
+            ret_df = pd.merge(
+                ret_df,
+                restore_df,
+                on='instrument',
+                how='left',
+                validate='one_to_one'
+            )
+            ret_df = ret_df.sort_values(by='avg_score', ascending=False)
+            if latest_stock_list is not None:
+                ret_df = pd.merge(ret_df, latest_stock_list, left_on='instrument', right_on='code', how='left', validate='one_to_one')
 
-                ret_df = pd.merge(ret_df, alpha158_df[alpha158_df['datetime'] == date], on='instrument', how='left', validate='one_to_one')
-                ret_filter_df = self.filter_ret_df(ret_df)
-                ret_df.to_csv(save_dir / f"{date_str}_ret.csv", index=True, encoding="utf-8-sig")
-                # 过滤后的结果重置索引，从 0 开始
-                ret_filter_df = ret_filter_df.reset_index(drop=True)
-                ret_filter_df.to_csv(save_dir / f"{date_str}_filter_ret.csv", index=True, encoding="utf-8-sig")
+            ret_df = pd.merge(ret_df, alpha158_df[alpha158_df['datetime'] == date], on='instrument', how='left', validate='one_to_one')
+            ret_filter_df = self.filter_ret_df(ret_df)
+            ret_df.to_csv(save_dir / f"{date_str}_ret.csv", index=True, encoding="utf-8-sig")
+            ret_filter_df = ret_filter_df.reset_index(drop=True)
+            ret_filter_df.to_csv(save_dir / f"{date_str}_filter_ret.csv", index=True, encoding="utf-8-sig")
 
         df_final.to_csv(save_dir / "total.csv", index=True, encoding="utf-8-sig")
 

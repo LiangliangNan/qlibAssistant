@@ -20,11 +20,6 @@ step: 60
 # rolling_type: sliding
 rolling_type: expanding
 
-# 股票列表配置
-stock_list:
-  - SH601699
-  - SH601318
-
 # 预测日期区间配置 (替代 test segment)
 predict_dates:
   # - start: 2026-02-03
