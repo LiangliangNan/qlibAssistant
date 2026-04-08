@@ -70,8 +70,13 @@ def run_command(cmd: str) -> Tuple[int, str, str]:
             text=True,
             encoding=DEFAULT_ENCODING
         )
+        if result.stderr:
+            logger.error(f"{cmd} 错误输出:\n{result.stderr}")
+        if result.returncode != 0:
+            logger.error(f"{cmd} 执行失败，返回码: {result.returncode}")
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except Exception as e:
+        logger.error(f"{cmd} 执行异常: {e}")
         return -1, "", str(e)
 
 def calculate_file_sha256(file_path: Union[str, Path]) -> Optional[str]:
